@@ -68,6 +68,24 @@ Open your browser and navigate to:
 
 ---
 
+### 7. Running the Standalone Python Edition (`main.py`)
+
+If you prefer to run the 28-sign ASL translator directly in Python (OpenCV + MediaPipe):
+
+1. Ensure **Python 3.9–3.11** is installed.
+2. Install the Python dependencies:
+   ```bash
+   pip install opencv-python mediapipe numpy
+   ```
+3. Run with your webcam (or use `--simulate` to test without a camera):
+   ```bash
+   python main.py
+   python main.py --simulate
+   ```
+4. **Keyboard Controls**: `Space` (add space), `d`/`Backspace` (delete), `c` (clear), `m` (toggle mirror), `l` (toggle landmarks), `q`/`Esc` (quit).
+
+---
+
 ## 📌 Project Architecture
 
 ```
@@ -90,6 +108,7 @@ real-time-hand-gesture-recognition/
 │   ├── App.tsx                    # Main dashboard layout (Theater / Split modes)
 │   ├── main.tsx                   # React DOM root entry
 │   └── index.css                  # Tailwind styles
+├── main.py                        # Standalone Python (OpenCV + MediaPipe) 28-sign app
 ├── index.html                     # HTML5 entry with MediaPipe scripts
 ├── package.json                   # Dependencies and scripts
 ├── tsconfig.json                  # TypeScript compiler options
