@@ -6,7 +6,7 @@ const zip = new JSZip();
 const rootDir = process.cwd();
 
 // Directories and files to exclude
-const EXCLUDE_DIRS = new Set(['node_modules', 'dist', '.git', '.cache']);
+const EXCLUDE_DIRS = new Set(['node_modules', 'dist', '.git', '.cache', '__pycache__', 'workspace', '.pytest_cache']);
 const EXCLUDE_FILES = new Set(['.DS_Store', 'project.zip', 'real-time-hand-gesture-recognition.zip']);
 
 function addDirectoryToZip(dirPath, zipFolder) {

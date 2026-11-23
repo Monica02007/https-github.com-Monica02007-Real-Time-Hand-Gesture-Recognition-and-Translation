@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Camera, Image as ImageIcon, Sliders, Cpu, HelpCircle, Eye, Info, Maximize2, Minimize2, Download, Package } from 'lucide-react';
+import { Image as ImageIcon, Sliders, Cpu, HelpCircle, Eye, Info, Maximize2, Minimize2 } from 'lucide-react';
 import { CameraStream } from './components/CameraStream';
 import { SnapshotUpload } from './components/SnapshotUpload';
 import { SentenceBuilder } from './components/SentenceBuilder';
@@ -49,15 +49,6 @@ export const App: React.FC = () => {
     },
     []
   );
-
-  const handleDownloadZip = () => {
-    const a = document.createElement('a');
-    a.href = '/real-time-hand-gesture-recognition.zip';
-    a.download = 'real-time-hand-gesture-recognition.zip';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row">
