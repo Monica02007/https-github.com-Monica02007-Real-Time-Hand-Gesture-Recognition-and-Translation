@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 3000",
-    "build": "tsc && vite build",
-    "lint": "tsc --noEmit",
+    "build": "vite build",
+    "lint": "node --check js/app.js && node --check js/landmarks.js && node --check js/model.js",
     "zip": "node scripts/create-zip.js",
     "preview": "vite preview --port 3000"
   },

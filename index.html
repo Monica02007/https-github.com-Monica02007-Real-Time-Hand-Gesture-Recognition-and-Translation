@@ -8,12 +8,439 @@
     <meta name="description" content="Real-time American Sign Language (ASL) gesture recognition and translation dashboard with live webcam tracking, landmark mesh visualization, debounced sentence builder, and snapshot analysis." />
     <meta property="og:title" content="Real-Time Hand Gesture Recognition & ASL Translation" />
     <meta property="og:description" content="Real-time American Sign Language (ASL) gesture recognition and translation dashboard with live webcam tracking, landmark mesh visualization, debounced sentence builder, and snapshot analysis." />
+    <link rel="stylesheet" href="./styles.css" />
     <!-- MediaPipe Hands & Camera Utils scripts -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   </head>
-  <body class="bg-slate-50 text-slate-900 min-h-screen antialiased selection:bg-blue-100 selection:text-blue-900">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+  <body>
+    <div class="app-shell">
+      <!-- Sidebar Controls -->
+      <aside class="sidebar">
+        <div class="sidebar-top">
+          <div class="brand-header">
+            <img
+              src="https://img.icons8.com/color/96/sign-language.png"
+              alt="ASL Logo"
+              class="brand-logo"
+            />
+            <div>
+              <h1 class="brand-title">ASL Translator</h1>
+              <p class="brand-subtitle">Gesture Recognition</p>
+            </div>
+          </div>
+
+          <div>
+            <span class="section-label">Select Mode</span>
+            <div class="mode-list">
+              <button type="button" id="mode-live-btn" class="mode-btn active">
+                <span class="pulse-dot"></span>
+                <span>🔴 Live Camera Stream</span>
+              </button>
+              <button type="button" id="mode-snapshot-btn" class="mode-btn">
+                <span>📸 Snapshot / Upload Test</span>
+              </button>
+            </div>
+          </div>
+
+          <hr class="divider" />
+
+          <div>
+            <span class="section-label">Camera Viewport Size</span>
+            <button type="button" id="sidebar-theater-btn" class="layout-toggle-btn">
+              <span id="sidebar-theater-text">Standard Split View</span>
+              <span id="sidebar-theater-badge" class="badge-mini">Split</span>
+            </button>
+          </div>
+
+          <hr class="divider" />
+
+          <div class="param-group">
+            <span class="section-label" style="margin-bottom:0">Detection Parameters</span>
+
+            <div>
+              <div class="param-row">
+                <span class="param-name">Confidence Threshold (%)</span>
+                <span id="conf-threshold-val" class="param-value">75%</span>
+              </div>
+              <input
+                type="range"
+                id="conf-threshold-range"
+                min="40"
+                max="99"
+                step="5"
+                value="75"
+                class="range-input"
+              />
+              <div class="range-bounds">
+                <span>40%</span>
+                <span>99%</span>
+              </div>
+            </div>
+
+            <div>
+              <div class="param-row">
+                <span class="param-name">Sentence Debounce</span>
+                <span id="debounce-val" class="param-value">12 frames</span>
+              </div>
+              <input
+                type="range"
+                id="debounce-range"
+                min="5"
+                max="30"
+                step="1"
+                value="12"
+                class="range-input"
+              />
+              <p class="param-hint">
+                Number of consecutive frames a gesture must be held to register.
+              </p>
+            </div>
+
+            <label class="checkbox-row">
+              <input type="checkbox" id="show-landmarks-check" checked />
+              <span>Show Hand Mesh &amp; Landmarks</span>
+            </label>
+          </div>
+
+          <hr class="divider" />
+
+          <div class="sidebar-actions">
+            <button type="button" id="open-training-btn" class="btn-dark">
+              <span>🚀 Train Model with Dataset</span>
+            </button>
+            <button type="button" id="open-guide-btn" class="btn-outline">
+              <span>📖 ASL Alphabet Guide (28 Signs)</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <p>Wrist-Relative Scale Normalization</p>
+          <p>21 3D Landmarks • 63 Features</p>
+        </div>
+      </aside>
+
+      <!-- Main Dashboard View -->
+      <main class="main-content">
+        <div class="main-header">
+          <div>
+            <h2 class="main-title">🤟 Real-Time ASL Translation Engine</h2>
+            <p class="main-subtitle">
+              American Sign Language gesture recognition powered by MediaPipe Hands, HTML5 Canvas, and JavaScript.
+            </p>
+          </div>
+          <button type="button" id="header-theater-btn" class="header-expand-btn">
+            <span id="header-theater-text">Expand Camera (Theater Mode)</span>
+          </button>
+        </div>
+
+        <!-- Sentence Builder Card -->
+        <section class="card sentence-card">
+          <div class="sentence-top">
+            <div class="sentence-display-wrap">
+              <div class="sentence-meta">
+                <span class="sentence-meta-left">
+                  <span>Constructed Sentence</span>
+                  <span id="flash-added-badge" class="flash-pill hidden"></span>
+                </span>
+                <span id="sentence-char-count" class="char-count">0 chars</span>
+              </div>
+              <div id="sentence-box" class="sentence-box">
+                <span class="sentence-placeholder">(Hold a hand sign steady to append letters or ASL words...)</span>
+              </div>
+            </div>
+
+            <div class="sentence-actions">
+              <button type="button" id="btn-space" class="ctrl-btn ctrl-neutral" title="Append space">
+                ␣ Space
+              </button>
+              <button type="button" id="btn-del" class="ctrl-btn ctrl-amber" title="Delete last character" disabled>
+                ⌫ Del
+              </button>
+              <button type="button" id="btn-clear" class="ctrl-btn ctrl-rose" title="Clear all text" disabled>
+                🗑 Clear
+              </button>
+              <button type="button" id="btn-copy" class="ctrl-btn ctrl-neutral" title="Copy sentence" disabled>
+                📋 Copy
+              </button>
+              <button type="button" id="btn-speak" class="ctrl-btn ctrl-blue" title="Speak aloud" disabled>
+                🔊 Speak
+              </button>
+            </div>
+          </div>
+
+          <div class="autocomplete-bar">
+            <span id="autocomplete-label" class="autocomplete-label">✨ Quick Words:</span>
+            <div id="autocomplete-chips" style="display:flex;flex-wrap:wrap;gap:0.4rem;"></div>
+          </div>
+        </section>
+
+        <!-- Dynamic Workspace Grid -->
+        <div id="dashboard-grid" class="dashboard-grid">
+          <!-- Primary Stage (Live Camera or Snapshot Upload) -->
+          <div>
+            <!-- Live Camera Panel -->
+            <div id="live-panel" class="camera-card">
+              <div class="camera-toolbar">
+                <div class="camera-status">
+                  <span id="cam-status-dot" class="status-dot live"></span>
+                  <div>
+                    <span id="cam-header-title" class="camera-title">Live Camera Feed</span>
+                    <span id="cam-header-sub" class="camera-sub">Initializing Camera Engine...</span>
+                  </div>
+                </div>
+
+                <div class="camera-controls">
+                  <select id="camera-device-select" class="device-select hidden"></select>
+                  <button type="button" id="cam-mirror-btn" class="cam-btn active-blue" title="Mirror Camera View">
+                    Mirror
+                  </button>
+                  <button type="button" id="cam-toggle-btn" class="cam-btn stop">
+                    Pause
+                  </button>
+                  <button type="button" id="cam-sim-btn" class="cam-btn sim-idle">
+                    Virtual Simulator
+                  </button>
+                  <button type="button" id="cam-theater-btn" class="cam-btn" title="Toggle Theater Mode">
+                    Expand
+                  </button>
+                  <button type="button" id="cam-fullscreen-btn" class="cam-btn" title="Fullscreen Camera">
+                    Fullscreen
+                  </button>
+                </div>
+              </div>
+
+              <div class="video-stage">
+                <video id="webcam-video" class="live-video" playsinline muted autoplay style="transform: scaleX(-1);"></video>
+                <canvas id="overlay-canvas" class="overlay-canvas"></canvas>
+
+                <!-- Paused Overlay -->
+                <div id="paused-overlay" class="stage-overlay hidden">
+                  <h4>Camera is Currently Paused</h4>
+                  <p class="error-box">Click the button below to resume your live real-time webcam translation.</p>
+                  <button type="button" id="resume-cam-btn" class="btn-primary">Start Camera Stream</button>
+                </div>
+
+                <!-- Error / Permission Overlay -->
+                <div id="error-overlay" class="stage-overlay hidden">
+                  <h4>Camera Access Needed</h4>
+                  <p id="camera-error-msg" class="error-box"></p>
+                  <div class="overlay-actions">
+                    <button type="button" id="retry-cam-btn" class="btn-primary">Retry Camera Permission</button>
+                    <button type="button" id="use-sim-btn" class="btn-indigo">Use Virtual Gesture Simulator</button>
+                    <button type="button" id="troubleshoot-toggle-btn" class="btn-muted">Troubleshoot Tips</button>
+                  </div>
+                  <div id="troubleshoot-box" class="troubleshoot-box hidden">
+                    <strong>Quick Camera Fixes:</strong>
+                    <ul>
+                      <li>Click the camera or lock icon in your browser address bar and choose "Always allow".</li>
+                      <li>Close other video apps (Zoom, Meet, Teams, Discord) that may be locking your webcam.</li>
+                      <li>Or use the "Virtual Simulator" or "Snapshot / Upload Test" tab anytime without a webcam.</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Virtual Simulator Dock -->
+              <div id="simulator-dock" class="simulator-dock hidden">
+                <div class="sim-header">
+                  <span class="sim-title">Virtual Hand Tracker (Click a sign below to feed 3D landmarks):</span>
+                  <span id="sim-active-badge" class="sim-active-badge">Active Sign: L</span>
+                </div>
+                <div class="sim-group-label">ASL Alphabet (A–Y)</div>
+                <div id="sim-letters-grid" class="sign-grid"></div>
+                <div class="sim-group-label words">ASL Words &amp; Controls</div>
+                <div id="sim-words-grid" class="sign-grid"></div>
+              </div>
+            </div>
+
+            <!-- Snapshot / Upload Panel -->
+            <div id="snapshot-panel" class="card snapshot-card hidden">
+              <div>
+                <h3 style="margin:0 0 0.25rem;font-size:1rem;">📸 Snapshot / Image Upload Test</h3>
+                <p style="margin:0;font-size:0.75rem;color:#64748b;">
+                  Upload any picture of a hand gesture or click one of the 28 pre-loaded ASL landmarks below to test inference.
+                </p>
+              </div>
+
+              <div class="snapshot-presets">
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.75rem;font-weight:700;">
+                  <span>⚡ Instant Landmark Presets (28 Signs — Click to Inspect &amp; Classify):</span>
+                  <span style="font-size:0.6875rem;color:#64748b;font-weight:400;">Static ASL Alphabet + Words</span>
+                </div>
+                <div class="sim-group-label" style="color:#64748b;margin:0;">Letters (A–Y)</div>
+                <div id="snap-letters-grid" class="sign-grid"></div>
+                <div class="sim-group-label" style="color:#047857;margin:0.25rem 0 0;">ASL Words &amp; Controls</div>
+                <div id="snap-words-grid" class="sign-grid"></div>
+              </div>
+
+              <div>
+                <input type="file" id="snapshot-file-input" accept="image/png, image/jpeg, image/jpg" class="hidden" />
+                <button type="button" id="snapshot-upload-btn" class="upload-dropzone">
+                  <strong id="snapshot-file-label" style="font-size:0.75rem;color:#334155;">Upload Hand Gesture Photo</strong>
+                  <span style="font-size:0.6875rem;color:#94a3b8;">PNG, JPG, JPEG</span>
+                </button>
+              </div>
+
+              <div class="snapshot-canvas-wrap">
+                <canvas id="snapshot-canvas" class="snapshot-canvas"></canvas>
+                <div id="snapshot-processing" class="stage-overlay hidden" style="font-size:0.8rem;">
+                  Analyzing hand landmarks...
+                </div>
+              </div>
+
+              <div id="snapshot-result" class="snapshot-result hidden">
+                <div style="display:flex;align-items:center;gap:0.75rem;">
+                  <div id="snapshot-badge" class="snapshot-badge"></div>
+                  <div>
+                    <div style="font-size:0.75rem;font-weight:700;color:#064e3b;">
+                      Recognized Sign:
+                      <span id="snapshot-conf" style="padding:0.1rem 0.4rem;border-radius:0.25rem;background:#a7f3d0;font-family:monospace;"></span>
+                    </div>
+                    <p id="snapshot-desc" style="margin:0.2rem 0 0;font-size:0.75rem;color:#047857;"></p>
+                  </div>
+                </div>
+                <button type="button" id="snapshot-add-btn" class="btn-green">Add to Sentence</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Classification Metrics Dashboard -->
+          <aside class="card metrics-card">
+            <div class="metrics-header">
+              <h3 class="metrics-title">Classification Metrics</h3>
+              <button type="button" id="metrics-guide-btn" class="link-btn">ASL Guide</button>
+            </div>
+
+            <div class="top1-box">
+              <div class="top1-tag">Detected Sign</div>
+              <div id="metric-detected-wrap" class="hidden">
+                <div id="metric-top-char" class="pred-badge"></div>
+                <p id="metric-top-desc" class="pred-desc"></p>
+              </div>
+              <div id="metric-waiting-wrap" class="waiting-box">
+                <p style="margin:0;font-weight:600;">Waiting for gesture...</p>
+                <p style="margin:0.25rem 0 0;font-size:0.75rem;">Show hand clearly in frame</p>
+              </div>
+
+              <div class="hold-section">
+                <div class="param-row" style="font-size:0.6875rem;">
+                  <span style="color:#64748b;">Debounce Hold</span>
+                  <span id="metric-hold-text" style="font-weight:700;color:#334155;">0 / 12 frames</span>
+                </div>
+                <div class="progress-track">
+                  <div id="metric-hold-bar" class="progress-fill"></div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div class="param-row">
+                <span style="font-weight:600;color:#334155;">Recognition Confidence</span>
+                <span id="metric-conf-text" style="font-weight:700;color:#64748b;">0.0%</span>
+              </div>
+              <div class="progress-track" style="height:8px;">
+                <div id="metric-conf-bar" class="progress-fill muted"></div>
+              </div>
+              <div class="range-bounds">
+                <span>0%</span>
+                <span id="metric-thresh-label" style="color:#d97706;font-weight:600;">Threshold: 75%</span>
+                <span>100%</span>
+              </div>
+            </div>
+
+            <div>
+              <div style="font-size:0.75rem;font-weight:700;color:#334155;margin-bottom:0.5rem;">
+                ✨ Top Candidates
+              </div>
+              <div id="metric-top3-list" class="top3-list">
+                <p style="margin:0;font-size:0.75rem;color:#94a3b8;font-style:italic;">No candidates detected</p>
+              </div>
+            </div>
+
+            <div class="metrics-footer">
+              <span>Feed: <strong id="metric-fps">30.0 FPS</strong></span>
+              <span style="font-family:monospace;color:#94a3b8;">Input: 63 coords</span>
+            </div>
+          </aside>
+        </div>
+      </main>
+    </div>
+
+    <!-- ASL Guide Modal -->
+    <div id="guide-modal" class="modal-backdrop hidden">
+      <div class="modal-panel">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title">📖 ASL Gesture Reference Guide (28 Signs)</h3>
+            <p class="modal-sub">24 static ASL alphabet letters + 4 static ASL words &amp; sentence controls</p>
+          </div>
+          <button type="button" id="close-guide-x" class="modal-close">✕</button>
+        </div>
+        <div style="padding:0.9rem 1.25rem 0.5rem;border-bottom:1px solid #f1f5f9;">
+          <input
+            type="text"
+            id="guide-search-input"
+            class="search-input"
+            placeholder="Search letters or words (e.g. ILY, GOOD, K, R)..."
+          />
+        </div>
+        <div id="guide-modal-body" class="modal-body"></div>
+        <div class="modal-footer">
+          <span>21 MediaPipe hand landmarks • J &amp; Z omitted (dynamic motion signs)</span>
+          <button type="button" id="close-guide-btn" class="btn-primary">Got it</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Model Training Simulator Modal -->
+    <div id="training-modal" class="modal-backdrop hidden">
+      <div class="modal-panel" style="max-width:42rem;">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title">🚀 Model Training Pipeline</h3>
+            <p class="modal-sub">Simulate MLP Neural Network training on 63-D Landmark Features</p>
+          </div>
+          <button type="button" id="close-training-x" class="modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="train-stats">
+            <div class="stat-card">
+              <span class="stat-label">Epoch</span>
+              <span id="train-epoch" class="stat-val">0 / 35</span>
+            </div>
+            <div class="stat-card" style="background:#ecfdf5;">
+              <span class="stat-label">Validation Acc</span>
+              <span id="train-val-acc" class="stat-val" style="color:#065f46;">28.0%</span>
+            </div>
+            <div class="stat-card" style="background:#eef2ff;">
+              <span class="stat-label">Train Loss</span>
+              <span id="train-loss" class="stat-val" style="color:#3730a3;">1.8400</span>
+            </div>
+            <div class="stat-card" style="background:#f5f3ff;">
+              <span class="stat-label">Validation Loss</span>
+              <span id="train-val-loss" class="stat-val" style="color:#5b21b6;">1.7900</span>
+            </div>
+          </div>
+
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:0.75rem;font-weight:700;margin-bottom:0.4rem;">
+              <span>Training Pipeline Logs (28 Classes • 63-D Landmarks)</span>
+              <span id="train-complete-tag" class="hidden" style="color:#059669;">✓ Checkpoint Ready</span>
+            </div>
+            <div id="train-logs" class="terminal-box">
+              Click "Start Training" to begin training loop...
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="justify-content:flex-end;">
+          <button type="button" id="close-training-btn" class="btn-muted">Close</button>
+          <button type="button" id="start-training-btn" class="btn-primary">Start Training</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./js/app.js"></script>
   </body>
 </html>

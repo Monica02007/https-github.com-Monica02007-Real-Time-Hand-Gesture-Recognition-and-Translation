@@ -1,30 +1,16 @@
-// Hand Gesture Classification Model & Feature Matching
-import type { Landmark3D } from './landmarks';
-
-export interface GesturePrediction {
-  topChar: string;
-  topConfidence: number;
-  top3: { char: string; confidence: number }[];
-}
+// Hand Gesture Classification Model & Feature Matching (28 Static ASL Classes)
 
 export const ASL_LETTERS = [
   'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I',
   'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
   'T', 'U', 'V', 'W', 'X', 'Y',
-] as const;
+];
 
-export const ASL_WORDS = [
-  'SPACE', 'ILY', 'GOOD', 'NO',
-] as const;
+export const ASL_WORDS = ['SPACE', 'ILY', 'GOOD', 'NO'];
 
-export const ASL_CLASSES = [
-  ...ASL_LETTERS,
-  ...ASL_WORDS,
-] as const;
+export const ASL_CLASSES = [...ASL_LETTERS, ...ASL_WORDS];
 
-export type ASLClass = typeof ASL_CLASSES[number];
-
-export const GESTURE_DESCRIPTIONS: Record<string, string> = {
+export const GESTURE_DESCRIPTIONS = {
   A: 'Fist with thumb resting upright against the side of the index finger',
   B: 'Four fingers straight up pressed together with thumb tucked across palm',
   C: 'Curved fingers and thumb forming an open "C" arc',
@@ -58,7 +44,7 @@ export const GESTURE_DESCRIPTIONS: Record<string, string> = {
 /**
  * Converts a recognized class token into text appended to the sentence builder.
  */
-export function formatSignForSentence(sign: string): string {
+export function formatSignForSentence(sign) {
   switch (sign) {
     case 'SPACE':
       return ' ';
@@ -73,10 +59,7 @@ export function formatSignForSentence(sign: string): string {
   }
 }
 
-/**
- * Calculates Euclidean distance between two 3D landmarks
- */
-function dist(p1: Landmark3D, p2: Landmark3D): number {
+function dist(p1, p2) {
   const dx = p1.x - p2.x;
   const dy = p1.y - p2.y;
   const dz = (p1.z || 0) - (p2.z || 0);
@@ -86,17 +69,15 @@ function dist(p1: Landmark3D, p2: Landmark3D): number {
 /**
  * Computes rich geometric hand-pose metrics from 21 MediaPipe landmarks
  */
-export function analyzeHandPose(landmarks: Landmark3D[]) {
-  if (landmarks.length < 21) {
+export function analyzeHandPose(landmarks) {
+  if (!landmarks || landmarks.length < 21) {
     return null;
   }
 
   const wrist = landmarks[0];
   const palmScale = dist(wrist, landmarks[9]) || 0.2;
 
-  // Finger straightness / extension checks:
-  // Works for upward, sideways, AND downward-pointing fingers (P, Q)
-  const isFingerStraight = (mcpIdx: number, pipIdx: number, tipIdx: number, minSpanRatio: number) => {
+  const isFingerStraight = (mcpIdx, pipIdx, tipIdx, minSpanRatio) => {
     const mcpToTip = dist(landmarks[mcpIdx], landmarks[tipIdx]);
     const mcpToPip = dist(landmarks[mcpIdx], landmarks[pipIdx]);
     const pipToTip = dist(landmarks[pipIdx], landmarks[tipIdx]);
@@ -116,7 +97,6 @@ export function analyzeHandPose(landmarks: Landmark3D[]) {
     dist(landmarks[4], landmarks[9]) > 0.72 * palmScale &&
     dist(wrist, landmarks[4]) > dist(wrist, landmarks[2]) * 1.12;
 
-  // Directional vectors (Image space: +y is down, -y is up)
   const idxDx = landmarks[8].x - landmarks[5].x;
   const idxDy = landmarks[8].y - landmarks[5].y;
   const midDx = landmarks[12].x - landmarks[9].x;
@@ -137,7 +117,6 @@ export function analyzeHandPose(landmarks: Landmark3D[]) {
     dist(landmarks[4], landmarks[5]) > 0.62 * palmScale;
   const thumbPointingDown = (landmarks[4].y - landmarks[2].y) > 0.22 * palmScale;
 
-  // Normalized pairwise distances
   const thumbTipDist = dist(wrist, landmarks[4]) / palmScale;
   const indexTipDist = dist(wrist, landmarks[8]) / palmScale;
   const indexPipDist = dist(wrist, landmarks[6]) / palmScale;
@@ -160,7 +139,6 @@ export function analyzeHandPose(landmarks: Landmark3D[]) {
   const indexTipToMcpDist = dist(landmarks[8], landmarks[5]) / palmScale;
   const middleTipToMcpDist = dist(landmarks[12], landmarks[9]) / palmScale;
 
-  // Special shape checks
   const isIndexHooked =
     !isIndexExtended &&
     !isMiddleExtended &&
@@ -248,7 +226,7 @@ export function analyzeHandPose(landmarks: Landmark3D[]) {
 /**
  * Predicts ASL gesture from 21 hand landmarks across all 28 static classes
  */
-export function classifyGesture(landmarks: Landmark3D[]): GesturePrediction {
+export function classifyGesture(landmarks) {
   const analysis = analyzeHandPose(landmarks);
   if (!analysis) {
     return {
@@ -259,7 +237,7 @@ export function classifyGesture(landmarks: Landmark3D[]): GesturePrediction {
   }
 
   const { extensions, directions, distances, shapes, thumbRelY } = analysis;
-  const rawScores: Record<ASLClass, number> = {
+  const rawScores = {
     A: 0.05, B: 0.05, C: 0.05, D: 0.05, E: 0.05, F: 0.05,
     G: 0.05, H: 0.05, I: 0.05, K: 0.05, L: 0.05, M: 0.05,
     N: 0.05, O: 0.05, P: 0.05, Q: 0.05, R: 0.05, S: 0.05,
@@ -270,7 +248,6 @@ export function classifyGesture(landmarks: Landmark3D[]): GesturePrediction {
   const extCount =
     extensions.index + extensions.middle + extensions.ring + extensions.pinky;
 
-  // --- 4 Fingers Extended (Index, Middle, Ring, Pinky) ---
   if (extensions.index && extensions.middle && extensions.ring && extensions.pinky) {
     if (extensions.thumb && distances.thumbIndexTipDist > 0.65 && distances.indexMiddleTipDist > 0.20) {
       rawScores.SPACE += 5.0;
@@ -281,7 +258,6 @@ export function classifyGesture(landmarks: Landmark3D[]): GesturePrediction {
     }
   }
 
-  // --- Middle, Ring, Pinky Extended; Index Pinched to Thumb (F) ---
   if (!extensions.index && extensions.middle && extensions.ring && extensions.pinky) {
     if (distances.thumbIndexTipDist < 0.55) {
       rawScores.F += 5.2;
@@ -290,12 +266,10 @@ export function classifyGesture(landmarks: Landmark3D[]): GesturePrediction {
     }
   }
 
-  // --- Index, Middle, Ring Extended; Pinky Curled (W) ---
   if (extensions.index && extensions.middle && extensions.ring && !extensions.pinky) {
     rawScores.W += 5.0;
   }
 
-  // --- Thumb, Index, Pinky Extended; Middle & Ring Curled (ILY) ---
   if (extensions.index && !extensions.middle && !extensions.ring && extensions.pinky) {
     if (extensions.thumb) {
       rawScores.ILY += 5.3;
@@ -304,7 +278,6 @@ export function classifyGesture(landmarks: Landmark3D[]): GesturePrediction {
     }
   }
 
-  // --- Only Pinky Extended (I or Y) ---
   if (!extensions.index && !extensions.middle && !extensions.ring && extensions.pinky) {
     if (extensions.thumb && distances.thumbPinkyTipDist > 1.0) {
       rawScores.Y += 5.2;
@@ -313,7 +286,6 @@ export function classifyGesture(landmarks: Landmark3D[]): GesturePrediction {
     }
   }
 
-  // --- Index + Middle Extended; Ring & Pinky Curled (H, P, NO, K, R, U, V) ---
   if (extensions.index && extensions.middle && !extensions.ring && !extensions.pinky) {
     if (directions.indexPointingDown && directions.middlePointingDown) {
       rawScores.P += 5.2;
@@ -341,7 +313,6 @@ export function classifyGesture(landmarks: Landmark3D[]): GesturePrediction {
     }
   }
 
-  // --- Only Index Extended (D, G, L, Q) ---
   if (extensions.index && !extensions.middle && !extensions.ring && !extensions.pinky) {
     if (directions.indexPointingDown && directions.thumbPointingDown) {
       rawScores.Q += 5.2;
@@ -354,7 +325,6 @@ export function classifyGesture(landmarks: Landmark3D[]): GesturePrediction {
     }
   }
 
-  // --- All 4 Fingers Curled (A, C, E, M, N, O, S, T, X, GOOD) ---
   if (extCount === 0) {
     if (directions.thumbPointingUpHigh) {
       rawScores.GOOD += 5.3;
@@ -417,12 +387,11 @@ export function classifyGesture(landmarks: Landmark3D[]): GesturePrediction {
     }
   }
 
-  // Compute Softmax probabilities
-  const keys = Object.keys(rawScores) as ASLClass[];
+  const keys = Object.keys(rawScores);
   const maxScore = Math.max(...keys.map((k) => rawScores[k]));
   const exps = keys.map((k) => Math.exp(rawScores[k] - maxScore));
   const sumExp = exps.reduce((a, b) => a + b, 0);
-  const probs: { char: string; confidence: number }[] = keys.map((k, i) => ({
+  const probs = keys.map((k, i) => ({
     char: k,
     confidence: exps[i] / sumExp,
   }));
@@ -436,14 +405,7 @@ export function classifyGesture(landmarks: Landmark3D[]): GesturePrediction {
   };
 }
 
-/**
- * Helper to place a finger's 4 joints [MCP, PIP, DIP, TIP] along a normalized direction
- */
-function buildFingerChain(
-  mcp: Landmark3D,
-  dir: { x: number; y: number; z: number },
-  lengths: [number, number, number]
-): [Landmark3D, Landmark3D, Landmark3D, Landmark3D] {
+function buildFingerChain(mcp, dir, lengths) {
   const norm = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z) || 1;
   const ux = dir.x / norm;
   const uy = dir.y / norm;
@@ -467,10 +429,7 @@ function buildFingerChain(
   return [mcp, pip, dip, tip];
 }
 
-/**
- * Helper to curl a finger down cleanly in front of the palm
- */
-function buildCurledFinger(mcp: Landmark3D, curlDepth = 0.045): [Landmark3D, Landmark3D, Landmark3D, Landmark3D] {
+function buildCurledFinger(mcp, curlDepth = 0.045) {
   const pip = { x: mcp.x, y: mcp.y - 0.035, z: -0.025 };
   const dip = { x: mcp.x, y: mcp.y + 0.015, z: -curlDepth };
   const tip = { x: mcp.x, y: mcp.y + 0.065, z: -0.015 };
@@ -480,26 +439,25 @@ function buildCurledFinger(mcp: Landmark3D, curlDepth = 0.045): [Landmark3D, Lan
 /**
  * Synthesizes realistic 21 3D hand landmarks for all 28 static ASL classes
  */
-export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01): Landmark3D[] {
-  const wrist: Landmark3D = { x: 0.50, y: 0.80, z: 0.0 };
-  const lm: Landmark3D[] = new Array(21).fill(null).map(() => ({ ...wrist }));
+export function synthesizeHandSkeleton(label, noiseStd = 0.01) {
+  const wrist = { x: 0.50, y: 0.80, z: 0.0 };
+  const lm = new Array(21).fill(null).map(() => ({ ...wrist }));
 
-  const idxMcp: Landmark3D = { x: 0.44, y: 0.58, z: 0.0 };
-  const midMcp: Landmark3D = { x: 0.50, y: 0.56, z: 0.0 };
-  const rngMcp: Landmark3D = { x: 0.55, y: 0.58, z: 0.0 };
-  const pnkMcp: Landmark3D = { x: 0.60, y: 0.61, z: 0.0 };
+  const idxMcp = { x: 0.44, y: 0.58, z: 0.0 };
+  const midMcp = { x: 0.50, y: 0.56, z: 0.0 };
+  const rngMcp = { x: 0.55, y: 0.58, z: 0.0 };
+  const pnkMcp = { x: 0.60, y: 0.61, z: 0.0 };
 
-  const thumbCmc: Landmark3D = { x: 0.43, y: 0.73, z: 0.0 };
-  const thumbMcp: Landmark3D = { x: 0.40, y: 0.67, z: -0.01 };
+  const thumbCmc = { x: 0.43, y: 0.73, z: 0.0 };
+  const thumbMcp = { x: 0.40, y: 0.67, z: -0.01 };
 
-  const setFinger = (startIdx: number, chain: [Landmark3D, Landmark3D, Landmark3D, Landmark3D]) => {
+  const setFinger = (startIdx, chain) => {
     lm[startIdx] = chain[0];
     lm[startIdx + 1] = chain[1];
     lm[startIdx + 2] = chain[2];
     lm[startIdx + 3] = chain[3];
   };
 
-  // Default: all 4 fingers curled, thumb neutral alongside index
   setFinger(5, buildCurledFinger(idxMcp));
   setFinger(9, buildCurledFinger(midMcp));
   setFinger(13, buildCurledFinger(rngMcp));
@@ -509,25 +467,22 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
   lm[3] = { x: 0.41, y: 0.61, z: -0.02 };
   lm[4] = { x: 0.40, y: 0.55, z: -0.02 };
 
-  const seg: [number, number, number] = [0.07, 0.06, 0.055];
-  const shortSeg: [number, number, number] = [0.055, 0.048, 0.045];
+  const seg = [0.07, 0.06, 0.055];
+  const shortSeg = [0.055, 0.048, 0.045];
 
   switch (label) {
     case 'A':
-      // Fist with thumb resting upright outside index
       lm[3] = { x: 0.39, y: 0.60, z: -0.01 };
       lm[4] = { x: 0.39, y: 0.53, z: -0.01 };
       break;
 
     case 'GOOD':
-      // Thumbs up: thumb raised high above index MCP
       lm[2] = { x: 0.41, y: 0.64, z: -0.01 };
       lm[3] = { x: 0.40, y: 0.53, z: -0.01 };
       lm[4] = { x: 0.39, y: 0.39, z: -0.01 };
       break;
 
     case 'B':
-      // 4 fingers straight up together, thumb tucked across palm
       setFinger(5, buildFingerChain(idxMcp, { x: 0, y: -1, z: -0.05 }, seg));
       setFinger(9, buildFingerChain(midMcp, { x: 0, y: -1, z: -0.05 }, [0.075, 0.065, 0.06]));
       setFinger(13, buildFingerChain(rngMcp, { x: 0, y: -1, z: -0.05 }, seg));
@@ -537,7 +492,6 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'SPACE':
-      // All 5 fingers extended & spread wide
       setFinger(5, buildFingerChain(idxMcp, { x: -0.35, y: -1, z: -0.05 }, seg));
       setFinger(9, buildFingerChain(midMcp, { x: -0.05, y: -1, z: -0.05 }, [0.075, 0.065, 0.06]));
       setFinger(13, buildFingerChain(rngMcp, { x: 0.22, y: -1, z: -0.05 }, seg));
@@ -548,8 +502,7 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'C': {
-      // Clear open C-curve arc with thumb opposing index tip
-      const makeArc = (mcp: Landmark3D, xShift: number): [Landmark3D, Landmark3D, Landmark3D, Landmark3D] => [
+      const makeArc = (mcp, xShift) => [
         mcp,
         { x: mcp.x + xShift - 0.01, y: mcp.y - 0.08, z: -0.02 },
         { x: mcp.x + xShift - 0.07, y: mcp.y - 0.12, z: -0.06 },
@@ -566,14 +519,12 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
     }
 
     case 'D':
-      // Index straight up; middle/ring/pinky touch thumb
       setFinger(5, buildFingerChain(idxMcp, { x: 0, y: -1, z: -0.05 }, seg));
       lm[3] = { x: 0.45, y: 0.64, z: -0.04 };
       lm[4] = { x: 0.49, y: 0.62, z: -0.05 };
       break;
 
     case 'E':
-      // All 4 fingers tightly curled; thumb tucked low underneath all fingertips
       setFinger(5, [idxMcp, { x: 0.44, y: 0.53, z: -0.03 }, { x: 0.44, y: 0.57, z: -0.04 }, { x: 0.44, y: 0.61, z: -0.02 }]);
       setFinger(9, [midMcp, { x: 0.50, y: 0.52, z: -0.03 }, { x: 0.50, y: 0.56, z: -0.04 }, { x: 0.50, y: 0.60, z: -0.02 }]);
       setFinger(13, [rngMcp, { x: 0.55, y: 0.53, z: -0.03 }, { x: 0.55, y: 0.57, z: -0.04 }, { x: 0.55, y: 0.61, z: -0.02 }]);
@@ -584,7 +535,6 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'F':
-      // Thumb & index pinch; middle, ring, pinky straight up
       setFinger(5, [idxMcp, { x: 0.43, y: 0.54, z: -0.04 }, { x: 0.42, y: 0.57, z: -0.06 }, { x: 0.41, y: 0.60, z: -0.07 }]);
       setFinger(9, buildFingerChain(midMcp, { x: 0.05, y: -1, z: -0.04 }, [0.075, 0.065, 0.06]));
       setFinger(13, buildFingerChain(rngMcp, { x: 0.15, y: -1, z: -0.04 }, seg));
@@ -594,7 +544,6 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'G':
-      // Index & thumb pointing sideways left
       setFinger(5, buildFingerChain(idxMcp, { x: -1, y: 0.05, z: -0.03 }, seg));
       lm[2] = { x: 0.37, y: 0.68, z: -0.02 };
       lm[3] = { x: 0.31, y: 0.67, z: -0.03 };
@@ -602,7 +551,6 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'H':
-      // Index & middle pointing sideways left together
       setFinger(5, buildFingerChain(idxMcp, { x: -1, y: 0.03, z: -0.03 }, seg));
       setFinger(9, buildFingerChain(midMcp, { x: -1, y: 0.06, z: -0.03 }, seg));
       lm[3] = { x: 0.44, y: 0.66, z: -0.04 };
@@ -610,14 +558,12 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'I':
-      // Only pinky straight up
       setFinger(17, buildFingerChain(pnkMcp, { x: 0.05, y: -1, z: -0.04 }, shortSeg));
       lm[3] = { x: 0.46, y: 0.63, z: -0.04 };
       lm[4] = { x: 0.51, y: 0.61, z: -0.05 };
       break;
 
     case 'K':
-      // Index & middle up in V, thumb wedged near middle PIP
       setFinger(5, buildFingerChain(idxMcp, { x: -0.25, y: -1, z: -0.03 }, seg));
       setFinger(9, buildFingerChain(midMcp, { x: 0.28, y: -1, z: -0.03 }, [0.075, 0.065, 0.06]));
       lm[2] = { x: 0.44, y: 0.64, z: -0.02 };
@@ -626,7 +572,6 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'L':
-      // Index straight up, thumb out sideways at 90 deg
       setFinger(5, buildFingerChain(idxMcp, { x: 0, y: -1, z: -0.03 }, seg));
       lm[2] = { x: 0.36, y: 0.68, z: -0.01 };
       lm[3] = { x: 0.29, y: 0.67, z: -0.02 };
@@ -634,19 +579,16 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'M':
-      // Fist with 3 fingers draped over thumb (thumb tucked behind ring/pinky PIP)
       lm[3] = { x: 0.51, y: 0.63, z: 0.01 };
       lm[4] = { x: 0.57, y: 0.60, z: 0.01 };
       break;
 
     case 'N':
-      // Fist with 2 fingers draped over thumb (thumb tucked behind index/middle PIP)
       lm[3] = { x: 0.45, y: 0.63, z: 0.01 };
       lm[4] = { x: 0.47, y: 0.60, z: 0.01 };
       break;
 
     case 'O':
-      // All fingertips curved meeting thumb tip in O
       setFinger(5, [idxMcp, { x: 0.41, y: 0.53, z: -0.04 }, { x: 0.39, y: 0.57, z: -0.07 }, { x: 0.40, y: 0.62, z: -0.08 }]);
       setFinger(9, [midMcp, { x: 0.47, y: 0.51, z: -0.04 }, { x: 0.44, y: 0.56, z: -0.07 }, { x: 0.42, y: 0.62, z: -0.08 }]);
       setFinger(13, [rngMcp, { x: 0.52, y: 0.53, z: -0.04 }, { x: 0.48, y: 0.58, z: -0.07 }, { x: 0.44, y: 0.63, z: -0.08 }]);
@@ -656,7 +598,6 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'P':
-      // Index & middle pointing downward
       setFinger(5, buildFingerChain(idxMcp, { x: -0.15, y: 1, z: -0.04 }, seg));
       setFinger(9, buildFingerChain(midMcp, { x: 0.15, y: 1, z: -0.04 }, seg));
       lm[3] = { x: 0.45, y: 0.64, z: -0.03 };
@@ -664,7 +605,6 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'Q':
-      // Index & thumb pointing downward
       setFinger(5, buildFingerChain(idxMcp, { x: -0.15, y: 1, z: -0.04 }, seg));
       lm[2] = { x: 0.39, y: 0.70, z: -0.02 };
       lm[3] = { x: 0.37, y: 0.76, z: -0.04 };
@@ -672,7 +612,6 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'R':
-      // Index & middle crossed upward
       setFinger(5, buildFingerChain(idxMcp, { x: 0.25, y: -1, z: -0.03 }, seg));
       setFinger(9, buildFingerChain(midMcp, { x: -0.25, y: -1, z: -0.01 }, [0.075, 0.065, 0.06]));
       lm[3] = { x: 0.47, y: 0.63, z: -0.04 };
@@ -680,19 +619,16 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'S':
-      // Tight fist with thumb crossed in front of index & middle PIPs
       lm[3] = { x: 0.44, y: 0.55, z: -0.06 };
       lm[4] = { x: 0.50, y: 0.55, z: -0.07 };
       break;
 
     case 'T':
-      // Fist with thumb tip tucked upward between index & middle PIPs
       lm[3] = { x: 0.45, y: 0.56, z: -0.015 };
       lm[4] = { x: 0.47, y: 0.50, z: -0.015 };
       break;
 
     case 'U':
-      // Index & middle straight up pressed together
       setFinger(5, buildFingerChain(idxMcp, { x: 0.02, y: -1, z: -0.04 }, seg));
       setFinger(9, buildFingerChain(midMcp, { x: -0.02, y: -1, z: -0.04 }, [0.075, 0.065, 0.06]));
       lm[3] = { x: 0.47, y: 0.63, z: -0.04 };
@@ -700,7 +636,6 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'V':
-      // Index & middle straight up spread in a V
       setFinger(5, buildFingerChain(idxMcp, { x: -0.35, y: -1, z: -0.04 }, seg));
       setFinger(9, buildFingerChain(midMcp, { x: 0.35, y: -1, z: -0.04 }, [0.075, 0.065, 0.06]));
       lm[3] = { x: 0.46, y: 0.64, z: -0.04 };
@@ -708,7 +643,6 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'W':
-      // Index, middle, ring straight up spread
       setFinger(5, buildFingerChain(idxMcp, { x: -0.35, y: -1, z: -0.04 }, seg));
       setFinger(9, buildFingerChain(midMcp, { x: 0.0, y: -1, z: -0.04 }, [0.075, 0.065, 0.06]));
       setFinger(13, buildFingerChain(rngMcp, { x: 0.35, y: -1, z: -0.04 }, seg));
@@ -717,7 +651,6 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'X':
-      // Index hooked/bent like a claw
       setFinger(5, [
         idxMcp,
         { x: 0.44, y: 0.47, z: -0.02 },
@@ -729,7 +662,6 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'Y':
-      // Thumb & pinky extended out
       setFinger(17, buildFingerChain(pnkMcp, { x: 0.45, y: -0.9, z: -0.03 }, shortSeg));
       lm[2] = { x: 0.36, y: 0.67, z: -0.01 };
       lm[3] = { x: 0.30, y: 0.62, z: -0.02 };
@@ -737,7 +669,6 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'ILY':
-      // Thumb + Index + Pinky extended
       setFinger(5, buildFingerChain(idxMcp, { x: -0.08, y: -1, z: -0.03 }, seg));
       setFinger(17, buildFingerChain(pnkMcp, { x: 0.35, y: -0.95, z: -0.03 }, shortSeg));
       lm[2] = { x: 0.36, y: 0.67, z: -0.01 };
@@ -746,7 +677,6 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
 
     case 'NO':
-      // Index & middle extended forward and pinched onto thumb tip
       setFinger(5, buildFingerChain(idxMcp, { x: -0.05, y: -0.45, z: -0.89 }, [0.06, 0.05, 0.045]));
       setFinger(9, buildFingerChain(midMcp, { x: -0.35, y: -0.42, z: -0.84 }, [0.06, 0.05, 0.045]));
       lm[2] = { x: 0.41, y: 0.63, z: -0.05 };
@@ -755,7 +685,6 @@ export function synthesizeHandSkeleton(label: ASLClass, noiseStd: number = 0.01)
       break;
   }
 
-  // Add subtle random variation & noise
   for (let i = 0; i < 21; i++) {
     lm[i].x += (Math.random() - 0.5) * noiseStd * 2;
     lm[i].y += (Math.random() - 0.5) * noiseStd * 2;

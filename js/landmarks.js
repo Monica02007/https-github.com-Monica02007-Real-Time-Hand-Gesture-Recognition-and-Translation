@@ -1,16 +1,10 @@
-// Landmark utilities matching the Python MediaPipe and src/utils.py implementation
-
-export interface Landmark3D {
-  x: number;
-  y: number;
-  z: number;
-}
+// Landmark utilities: 21 3D hand keypoints, wrist-relative normalization, and Canvas mesh rendering
 
 export const LANDMARK_COUNT = 21;
 export const FEATURE_DIM = 63; // 21 * 3
 
 // Standard MediaPipe Hand skeleton connections
-export const HAND_CONNECTIONS: [number, number][] = [
+export const HAND_CONNECTIONS = [
   // Thumb
   [0, 1], [1, 2], [2, 3], [3, 4],
   // Index finger
@@ -22,17 +16,17 @@ export const HAND_CONNECTIONS: [number, number][] = [
   // Pinky
   [0, 17], [17, 18], [18, 19], [19, 20],
   // Palm base cross connections
-  [5, 9], [9, 13], [13, 17]
+  [5, 9], [9, 13], [13, 17],
 ];
 
 export const FINGER_COLORS = {
-  thumb: '#f59e0b',   // Amber
-  index: '#3b82f6',   // Blue
-  middle: '#10b981',  // Emerald
-  ring: '#8b5cf6',    // Purple
-  pinky: '#ec4899',   // Pink
-  palm: '#06b6d4',    // Cyan
-  wrist: '#ef4444'    // Red
+  thumb: '#f59e0b',
+  index: '#3b82f6',
+  middle: '#10b981',
+  ring: '#8b5cf6',
+  pinky: '#ec4899',
+  palm: '#06b6d4',
+  wrist: '#ef4444',
 };
 
 /**
@@ -41,19 +35,19 @@ export const FINGER_COLORS = {
  * 2. d_max = max(norm(p_rel))
  * 3. p_norm = p_rel / (d_max + 1e-6)
  */
-export function normalizeLandmarks(landmarks: Landmark3D[] | number[]): number[] {
-  let pts: Landmark3D[] = [];
+export function normalizeLandmarks(landmarks) {
+  let pts = [];
 
   if (Array.isArray(landmarks) && landmarks.length === 63 && typeof landmarks[0] === 'number') {
     for (let i = 0; i < 21; i++) {
       pts.push({
-        x: (landmarks as number[])[i * 3],
-        y: (landmarks as number[])[i * 3 + 1],
-        z: (landmarks as number[])[i * 3 + 2]
+        x: landmarks[i * 3],
+        y: landmarks[i * 3 + 1],
+        z: landmarks[i * 3 + 2],
       });
     }
   } else {
-    pts = landmarks as Landmark3D[];
+    pts = landmarks || [];
   }
 
   if (pts.length < 21) {
@@ -61,13 +55,13 @@ export function normalizeLandmarks(landmarks: Landmark3D[] | number[]): number[]
   }
 
   const wrist = pts[0];
-  const relPoints: Landmark3D[] = [];
+  const relPoints = [];
   let maxDist = 0;
 
   for (let i = 0; i < 21; i++) {
     const rx = pts[i].x - wrist.x;
     const ry = pts[i].y - wrist.y;
-    const rz = pts[i].z - wrist.z;
+    const rz = (pts[i].z || 0) - (wrist.z || 0);
     const dist = Math.sqrt(rx * rx + ry * ry + rz * rz);
     if (dist > maxDist) {
       maxDist = dist;
@@ -76,7 +70,7 @@ export function normalizeLandmarks(landmarks: Landmark3D[] | number[]): number[]
   }
 
   const denom = maxDist + 1e-6;
-  const normalized: number[] = [];
+  const normalized = [];
   for (let i = 0; i < 21; i++) {
     normalized.push(relPoints[i].x / denom);
     normalized.push(relPoints[i].y / denom);
@@ -87,14 +81,9 @@ export function normalizeLandmarks(landmarks: Landmark3D[] | number[]): number[]
 }
 
 /**
- * Computes bounding box from normalized landmarks for a given canvas dimensions
+ * Computes bounding box from normalized landmarks for given canvas dimensions
  */
-export function getLandmarkBoundingBox(
-  landmarks: Landmark3D[],
-  width: number,
-  height: number,
-  padding: number = 24
-) {
+export function getLandmarkBoundingBox(landmarks, width, height, padding = 24) {
   let minX = Infinity;
   let maxX = -Infinity;
   let minY = Infinity;
@@ -113,37 +102,23 @@ export function getLandmarkBoundingBox(
     x: Math.max(0, minX - padding),
     y: Math.max(0, minY - padding),
     width: Math.min(width, maxX - minX + padding * 2),
-    height: Math.min(height, maxY - minY + padding * 2)
+    height: Math.min(height, maxY - minY + padding * 2),
   };
 }
 
 /**
- * Draws the hand landmarks mesh and connection bones onto an HTML5 Canvas context
+ * Draws the hand landmarks mesh, joint circles, and bounding box onto an HTML5 Canvas context
  */
-export function drawHandLandmarks(
-  ctx: CanvasRenderingContext2D,
-  landmarks: Landmark3D[],
-  width: number,
-  height: number,
-  options?: {
-    showBones?: boolean;
-    showJoints?: boolean;
-    showBBox?: boolean;
-    label?: string;
-    confidence?: number;
-    color?: string;
-  }
-) {
+export function drawHandLandmarks(ctx, landmarks, width, height, options = {}) {
   const {
     showBones = true,
     showJoints = true,
     showBBox = true,
-    label,
+    label = '',
     confidence = 0,
-    color = '#22c55e'
-  } = options || {};
+    color = '#22c55e',
+  } = options;
 
-  // 1. Draw connection bones
   if (showBones) {
     ctx.lineWidth = 3;
     ctx.lineCap = 'round';
@@ -152,7 +127,6 @@ export function drawHandLandmarks(
     for (const [startIdx, endIdx] of HAND_CONNECTIONS) {
       const p1 = landmarks[startIdx];
       const p2 = landmarks[endIdx];
-
       if (!p1 || !p2) continue;
 
       const x1 = p1.x * width;
@@ -160,8 +134,7 @@ export function drawHandLandmarks(
       const x2 = p2.x * width;
       const y2 = p2.y * height;
 
-      // Color coding per finger joint
-      let strokeColor = '#38bdf8'; // light cyan
+      let strokeColor = '#38bdf8';
       if (endIdx <= 4) strokeColor = FINGER_COLORS.thumb;
       else if (endIdx <= 8) strokeColor = FINGER_COLORS.index;
       else if (endIdx <= 12) strokeColor = FINGER_COLORS.middle;
@@ -176,28 +149,24 @@ export function drawHandLandmarks(
     }
   }
 
-  // 2. Draw joint points
   if (showJoints) {
     for (let i = 0; i < landmarks.length; i++) {
       const lm = landmarks[i];
       const px = lm.x * width;
       const py = lm.y * height;
 
-      // Outer circle
       ctx.beginPath();
       const radius = i === 0 || i === 4 || i === 8 || i === 12 || i === 16 || i === 20 ? 6 : 4;
       ctx.arc(px, py, radius, 0, 2 * Math.PI);
       ctx.fillStyle = i === 0 ? '#ef4444' : '#ffffff';
       ctx.fill();
 
-      // Border
       ctx.lineWidth = 1.5;
       ctx.strokeStyle = '#0f172a';
       ctx.stroke();
     }
   }
 
-  // 3. Draw bounding box and label tag
   if (showBBox && label) {
     const box = getLandmarkBoundingBox(landmarks, width, height);
 
@@ -205,7 +174,6 @@ export function drawHandLandmarks(
     ctx.strokeStyle = color;
     ctx.strokeRect(box.x, box.y, box.width, box.height);
 
-    // Tag background
     const tagText = `${label} (${(confidence * 100).toFixed(0)}%)`;
     ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     const textMetrics = ctx.measureText(tagText);
@@ -215,7 +183,11 @@ export function drawHandLandmarks(
 
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.roundRect(box.x, tagY - tagHeight, tagWidth, tagHeight, [4, 4, 0, 0]);
+    if (typeof ctx.roundRect === 'function') {
+      ctx.roundRect(box.x, tagY - tagHeight, tagWidth, tagHeight, [4, 4, 0, 0]);
+    } else {
+      ctx.rect(box.x, tagY - tagHeight, tagWidth, tagHeight);
+    }
     ctx.fill();
 
     ctx.fillStyle = '#ffffff';
