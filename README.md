@@ -86,6 +86,18 @@ If you prefer to run the 28-sign ASL translator directly in Python (OpenCV + Med
 
 ---
 
+### 8. Deploying to GitHub Pages
+
+A Vite + React/TypeScript app **must be compiled first** (`npm run build` → `dist/`) before GitHub Pages can display it. Serving the raw `main` branch causes a blank page because browsers cannot execute `/src/main.tsx` directly.
+
+This repository includes `.github/workflows/deploy.yml` and `base: './'` in `vite.config.ts`:
+1. Push your project to GitHub (`main` or `master`).
+2. In your GitHub repo, go to **Settings → Pages**.
+3. Under **Build and deployment → Source**, choose **GitHub Actions** (instead of "Deploy from a branch").
+4. GitHub will automatically run `npm run build` and publish the compiled site over HTTPS (required for webcam access).
+
+---
+
 ## 📌 Project Architecture
 
 ```
